@@ -65,10 +65,19 @@ A modern multi-screen Flutter application developed for Mobile Application Devel
 ```text
 lib
 ├── controllers
+│   └── auth_controller.dart
 ├── enums
+│   └── app_enums.dart
 ├── models
+│   ├── subject_model.dart
+│   └── user_model.dart
 ├── screens
+│   ├── dashboard_screen.dart
+│   ├── detail_screen.dart
+│   ├── login_screen.dart
+│   └── register_screen.dart
 ├── validators
+│   └── app_validator.dart
 └── main.dart
 ```
 
