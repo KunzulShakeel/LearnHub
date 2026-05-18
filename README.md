@@ -22,7 +22,7 @@ A modern banking mobile application UI built using Flutter.
 ![Register](screenshot/register.png)
 
 ### Home Page
-![Home](screenshot/home.png)
+![Home](screenshot/homepage.png)
 
 ### Account Page
 ![Account](screenshot/accounts.png)
