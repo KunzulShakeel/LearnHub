@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'login_page.dart';
+import 'screens/login_screen.dart';
 
 void main() {
   runApp(const NovaBankApp());
@@ -12,12 +12,11 @@ class NovaBankApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'NovaBank',
+      title: 'LearnHub',
       theme: ThemeData(
         primarySwatch: Colors.deepPurple,
-        scaffoldBackgroundColor: const Color(0xFFF4F6FA),
       ),
-      home: const LoginPage(),
+      home: const LoginScreen(),
     );
   }
 }
