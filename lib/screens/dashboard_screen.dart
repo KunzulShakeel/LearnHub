@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/subject_model.dart';
+import 'courses_screen.dart';
 import 'detail_screen.dart';
 import 'login_screen.dart';
 
@@ -117,6 +118,31 @@ class DashboardScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 25),
+
+            Card(
+              color: Colors.deepPurple.shade50,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.deepPurple,
+                  child: Icon(Icons.cloud_sync, color: Colors.white),
+                ),
+                title: const Text(
+                  "Courses (Live API)",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text("Fetch, add, edit & delete via JSONPlaceholder"),
+                trailing: const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CoursesScreen()),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 20),
 
             const Align(
               alignment: Alignment.centerLeft,
