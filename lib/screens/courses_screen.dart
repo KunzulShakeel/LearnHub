@@ -1,102 +1,75 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../enums/app_enums.dart';
 import '../models/course_model.dart';
-import '../services/course_service.dart';
+import '../providers/course_provider.dart';
 import 'course_form_screen.dart';
 
-/// Displays the list of courses fetched from the JSONPlaceholder API and
-/// lets the user Add / Edit / Delete courses (full CRUD).
-///
-/// UI state (loading / success / error) is tracked via [ApiStatus].
-/// All network calls are delegated to [CourseService] — this widget only
-/// deals with presentation and user interaction.
-class CoursesScreen extends StatefulWidget {
+/// Displays courses fetched offline-first (API when online, cache when
+/// offline) and lets the user Add / Edit / Delete with optimistic UI
+/// updates. All state comes from [CourseProvider]; this widget contains
+/// no business logic of its own.
+class CoursesScreen extends StatelessWidget {
   const CoursesScreen({super.key});
 
   @override
-  State<CoursesScreen> createState() => _CoursesScreenState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider<CourseProvider>(
+      create: (_) => CourseProvider()..init(),
+      child: const _CoursesView(),
+    );
+  }
 }
 
-class _CoursesScreenState extends State<CoursesScreen> {
-  final CourseService _courseService = CourseService();
-
-  ApiStatus _status = ApiStatus.loading;
-  List<CourseModel> _courses = [];
-  String _errorMessage = '';
-
-  // Tracks which course id currently has an action (update/delete) in
-  // flight, so we can show an inline spinner on just that item.
-  int? _mutatingCourseId;
+class _CoursesView extends StatefulWidget {
+  const _CoursesView();
 
   @override
-  void initState() {
-    super.initState();
-    _loadCourses();
+  State<_CoursesView> createState() => _CoursesViewState();
+}
+
+class _CoursesViewState extends State<_CoursesView> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadCourses() async {
-    setState(() {
-      _status = ApiStatus.loading;
-      _errorMessage = '';
-    });
-
-    try {
-      final courses = await _courseService.fetchCourses();
-      setState(() {
-        _courses = courses;
-        _status = ApiStatus.success;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _status = ApiStatus.error;
-      });
-    }
-  }
-
-  Future<void> _goToAddCourse() async {
+  Future<void> _goToAddCourse(BuildContext context) async {
+    final provider = context.read<CourseProvider>();
     final newCourse = await Navigator.push<CourseModel>(
       context,
       MaterialPageRoute(builder: (_) => const CourseFormScreen()),
     );
-
     if (newCourse == null) return;
 
-    try {
-      final created = await _courseService.addCourse(newCourse);
-      setState(() {
-        _courses.insert(0, created);
-      });
-      _showSnackBar("Course added successfully");
-    } catch (e) {
-      _showSnackBar("Failed to add course: $e", isError: true);
-    }
+    final ok = await provider.addCourse(newCourse);
+    _showSnackBar(
+      context,
+      ok ? "Course added successfully" : provider.errorMessage,
+      isError: !ok,
+    );
   }
 
-  Future<void> _goToEditCourse(CourseModel course) async {
+  Future<void> _goToEditCourse(BuildContext context, CourseModel course) async {
+    final provider = context.read<CourseProvider>();
     final updated = await Navigator.push<CourseModel>(
       context,
       MaterialPageRoute(builder: (_) => CourseFormScreen(course: course)),
     );
-
     if (updated == null) return;
 
-    setState(() => _mutatingCourseId = course.id);
-    try {
-      final saved = await _courseService.updateCourse(updated);
-      setState(() {
-        final index = _courses.indexWhere((c) => c.id == course.id);
-        if (index != -1) _courses[index] = saved;
-      });
-      _showSnackBar("Course updated successfully");
-    } catch (e) {
-      _showSnackBar("Failed to update course: $e", isError: true);
-    } finally {
-      setState(() => _mutatingCourseId = null);
-    }
+    final ok = await provider.updateCourse(updated);
+    _showSnackBar(
+      context,
+      ok ? "Course updated successfully" : provider.errorMessage,
+      isError: !ok,
+    );
   }
 
-  Future<void> _confirmAndDelete(CourseModel course) async {
+  Future<void> _confirmAndDelete(BuildContext context, CourseModel course) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -116,24 +89,19 @@ class _CoursesScreenState extends State<CoursesScreen> {
       ),
     );
 
-    if (confirmed != true || course.id == null) return;
+    if (confirmed != true || course.id == null || !context.mounted) return;
 
-    setState(() => _mutatingCourseId = course.id);
-    try {
-      await _courseService.deleteCourse(course.id!);
-      setState(() {
-        _courses.removeWhere((c) => c.id == course.id);
-      });
-      _showSnackBar("Course deleted successfully");
-    } catch (e) {
-      _showSnackBar("Failed to delete course: $e", isError: true);
-    } finally {
-      setState(() => _mutatingCourseId = null);
-    }
+    final provider = context.read<CourseProvider>();
+    final ok = await provider.deleteCourse(course.id!);
+    if (!context.mounted) return;
+    _showSnackBar(
+      context,
+      ok ? "Course deleted successfully" : provider.errorMessage,
+      isError: !ok,
+    );
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    if (!mounted) return;
+  void _showSnackBar(BuildContext context, String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -142,12 +110,68 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  Widget _buildBody() {
-    switch (_status) {
-      case ApiStatus.loading:
+  Widget _offlineBanner(CourseProvider provider) {
+    if (!provider.isOffline) return const SizedBox.shrink();
+
+    final syncText = provider.lastSyncTime != null
+        ? "Last synced ${TimeOfDay.fromDateTime(provider.lastSyncTime!).format(context)}"
+        : "No previous sync";
+
+    return Container(
+      width: double.infinity,
+      color: Colors.orange.shade100,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off, color: Colors.deepOrange, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "You're offline — showing cached courses. $syncText.",
+              style: const TextStyle(color: Colors.deepOrange, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _searchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) => context.read<CourseProvider>().search(value),
+        decoration: InputDecoration(
+          hintText: "Search courses...",
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchController.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    context.read<CourseProvider>().search('');
+                  },
+                ),
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, CourseProvider provider) {
+    switch (provider.status) {
+      case CourseLoadStatus.initial:
+      case CourseLoadStatus.loading:
         return const Center(child: CircularProgressIndicator());
 
-      case ApiStatus.error:
+      case CourseLoadStatus.error:
         return Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -162,13 +186,13 @@ class _CoursesScreenState extends State<CoursesScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _errorMessage,
+                  provider.errorMessage,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
-                  onPressed: _loadCourses,
+                  onPressed: () => provider.loadCourses(),
                   icon: const Icon(Icons.refresh),
                   label: const Text("Retry"),
                 ),
@@ -177,23 +201,57 @@ class _CoursesScreenState extends State<CoursesScreen> {
           ),
         );
 
-      case ApiStatus.success:
-        if (_courses.isEmpty) {
-          return const Center(child: Text("No courses yet. Tap + to add one."));
+      case CourseLoadStatus.empty:
+        return LayoutBuilder(
+          builder: (context, constraints) => RefreshIndicator(
+            onRefresh: provider.loadCourses,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inbox_outlined, size: 60, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text(
+                          "No courses yet",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          "Tap + to add your first course.",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+      case CourseLoadStatus.success:
+        if (provider.courses.isEmpty) {
+          // Success overall, but the current search query matched nothing.
+          return const Center(child: Text("No courses match your search."));
         }
         return RefreshIndicator(
-          onRefresh: _loadCourses,
+          onRefresh: provider.loadCourses,
           child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _courses.length,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            itemCount: provider.courses.length,
             itemBuilder: (context, index) {
-              final course = _courses[index];
-              final isMutating = _mutatingCourseId == course.id;
+              final course = provider.courses[index];
+              final isMutating = provider.mutatingCourseId == course.id;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
-                shape:
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Colors.deepPurple,
@@ -225,11 +283,11 @@ class _CoursesScreenState extends State<CoursesScreen> {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.deepPurple),
-                              onPressed: () => _goToEditCourse(course),
+                              onPressed: () => _goToEditCourse(context, course),
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _confirmAndDelete(course),
+                              onPressed: () => _confirmAndDelete(context, course),
                             ),
                           ],
                         ),
@@ -243,19 +301,29 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<CourseProvider>();
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Courses (Live API)"),
+        title: const Text("Courses (Offline-First)"),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _status == ApiStatus.loading ? null : _loadCourses,
+            onPressed: provider.status == CourseLoadStatus.loading
+                ? null
+                : () => provider.loadCourses(),
           ),
         ],
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          _offlineBanner(provider),
+          _searchBar(),
+          Expanded(child: _buildBody(context, provider)),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _goToAddCourse,
+        onPressed: () => _goToAddCourse(context),
         backgroundColor: Colors.deepPurple,
         child: const Icon(Icons.add, color: Colors.white),
       ),

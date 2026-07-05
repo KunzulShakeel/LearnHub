@@ -5,12 +5,14 @@ import '../models/course_model.dart';
 /// Thin service layer that talks to the JSONPlaceholder REST API and
 /// converts responses into [CourseModel] objects.
 ///
-/// All networking logic lives here so screens never call `http` directly
-/// (clean separation between API layer and UI layer).
+/// This class ONLY performs HTTP requests and JSON (de)serialization —
+/// it has no knowledge of local storage, caching, or app state. Deciding
+/// when to use the network vs. local data is the CourseRepository's job;
+/// deciding how that affects UI state is CourseProvider's job.
 ///
 /// API used: JSONPlaceholder (https://jsonplaceholder.typicode.com)
 /// Docs followed: https://jsonplaceholder.typicode.com/guide
-class CourseService {
+class CourseApiService {
   static const String _baseUrl = 'https://jsonplaceholder.typicode.com';
   static const String _resource = '/posts';
 

@@ -38,6 +38,16 @@ dependencies:
   # Used for all REST API calls (JSONPlaceholder course CRUD)
   http: ^1.2.2
 
+  # State management (repository -> provider -> UI)
+  provider: ^6.1.2
+
+  # Local/offline persistence for cached course data
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Detects online/offline status to drive offline-first behaviour
+  connectivity_plus: ^6.0.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

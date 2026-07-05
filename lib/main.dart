@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'local/course_local_service.dart';
 import 'screens/login_screen.dart';
 
-void main() {
+Future<void> main() async {
+  // Hive must be initialized before any screen tries to read/write the
+  // offline course cache.
+  WidgetsFlutterBinding.ensureInitialized();
+  await CourseLocalService.init();
+
   runApp(const NovaBankApp());
 }
 
